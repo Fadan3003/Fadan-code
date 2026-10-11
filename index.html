@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fadan Code</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <span class="dot"></span> Fadan Code
+  <button class="iconBtn" id="settingsBtn" type="button" style="margin-left:auto;">⚙ API Key</button>
+</header>
+<div id="settingsPanel" class="settingsPanel">
+  <label for="apiKeyInput">Anthropic API Key</label>
+  <input id="apiKeyInput" type="password" placeholder="sk-ant-..." autocomplete="off" />
+  <div class="settingsRow">
+    <button id="saveKeyBtn" type="button">Save</button>
+    <button id="closeSettingsBtn" class="iconBtn" type="button">Close</button>
+  </div>
+  <p class="settingsHint">Stored only in this browser's localStorage. Get a key at console.anthropic.com.</p>
+</div>
+<div class="main">
+  <div class="panel">
+    <div class="panelHead"><h2>Code</h2></div>
+    <div class="codeWrap">
+      <pre id="codeHighlight" aria-hidden="true"><code id="codeHighlightInner"></code></pre>
+      <textarea id="code" spellcheck="false" placeholder="// generated code appears here"></textarea>
+      <div id="tagSuggest" class="tagSuggest"></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panelHead"><h2>Preview</h2><button class="iconBtn" id="openTabBtn" type="button">Open in tab ↗</button></div>
+    <iframe id="preview" sandbox="allow-scripts allow-modals allow-forms allow-popups"></iframe>
+  </div>
+</div>
+<div id="status"></div>
+<div class="inputRow">
+  <input id="promptInput" type="text" placeholder="What should be created?" />
+  <button id="genBtn">Generate</button>
+</div>
+<script src="script.js"></script>
+</body>
+</html>
