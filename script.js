@@ -341,11 +341,86 @@ function hideSuggest(){
   suggestRange = null;
 }
 
-function showSuggest(items, start, end, caretPos){
+const CSS_PROPS = ['align-items','animation','background','background-color','border','border-radius','box-shadow','color','cursor','display','flex','flex-direction','font-family','font-size','font-weight','gap','grid-template-columns','height','justify-content','left','letter-spacing','line-height','margin','margin-top','margin-bottom','max-width','min-height','opacity','overflow','padding','padding-top','padding-bottom','position','right','text-align','text-decoration','top','transform','transition','width','z-index'];
+const GLOBAL_ATTRS = ['onclick','id','class','style','title','hidden'];
+const EXTRA_ATTRS = ['onchange','oninput','onsubmit','onkeydown','onkeyup','onload','onmouseover','onmouseout','onfocus','onblur'];
+const TAG_ATTRS = { button:['type','onclick','disabled'], input:['type','value','placeholder','name','oninput','onchange','disabled'], a:['href','target','onclick'], img:['src','alt','width','height'], form:['action','method','onsubmit'], label:['for'], textarea:['placeholder','rows','oninput'], select:['onchange','name'], option:['value'], script:['src','defer'], link:['rel','href'], meta:['charset','name','content'], iframe:['src'] };
+const JS_SNIPPETS = [
+  ['function','function |(){\n  \n}'], ['async','async function |(){\n  \n}'], ['const','const | = ;'], ['let','let | = ;'],
+  ['if','if(|){\n  \n}'], ['else','else {\n  |\n}'], ['for','for(let i = 0; i < |; i++){\n  \n}'], ['while','while(|){\n  \n}'],
+  ['return','return |;'], ['await','await |'], ['console.log','console.log(|);'], ['warn',"warn('|');"],
+  ['document.getElementById',"document.getElementById('|')"], ['document.querySelector',"document.querySelector('|')"],
+  ['document.querySelectorAll',"document.querySelectorAll('|')"], ['document.createElement',"document.createElement('|')"],
+  ['addEventListener',"addEventListener('click', () => {\n  |\n});"], ['setTimeout','setTimeout(() => {\n  |\n}, 1000);'],
+  ['setInterval','setInterval(() => {\n  |\n}, 1000);'], ['innerHTML',"innerHTML = '|';"], ['textContent',"textContent = '|';"],
+  ['classList.add',"classList.add('|')"], ['classList.toggle',"classList.toggle('|')"], ['fetch',"fetch('|')"],
+  ['JSON.stringify','JSON.stringify(|)'], ['JSON.parse','JSON.parse(|)'], ['Math.random','Math.random()|'], ['Math.floor','Math.floor(|)'],
+  ['localStorage.getItem',"localStorage.getItem('|')"], ['localStorage.setItem',"localStorage.setItem('|', )"]
+];
+let suggestKind = '';
+
+function ctxType(before){
+  const low = before.toLowerCase();
+  const sO = low.lastIndexOf('<style'), sC = low.lastIndexOf('</style');
+  if(sO > sC && low.indexOf('>', sO) !== -1) return { type:'css', from: low.indexOf('>', sO) + 1 };
+  const jO = low.lastIndexOf('<script'), jC = low.lastIndexOf('<' + '/script');
+  if(jO > jC && low.indexOf('>', jO) !== -1) return { type:'js', from: low.indexOf('>', jO) + 1 };
+  return { type:'html' };
+}
+
+function getSuggestions(before){
+  const pos = before.length;
+  const ctx = ctxType(before);
+  if(ctx.type === 'css'){
+    const body = before.slice(ctx.from);
+    const depth = (body.match(/\{/g) || []).length - (body.match(/\}/g) || []).length;
+    const m = body.match(/(?:^|[{;}\n])\s*([a-z-]*)$/i);
+    if(depth > 0 && m && m[1].length){
+      const p = m[1].toLowerCase();
+      const items = CSS_PROPS.filter(x => x.startsWith(p)).slice(0, 8).map(x => ({ label: x, text: x + ': |;' }));
+      return items.length ? { items, start: pos - p.length, end: pos, kind: 'css' } : null;
+    }
+    return null;
+  }
+  if(ctx.type === 'js'){
+    const m = before.slice(ctx.from).match(/([A-Za-z_$][\w$]*(?:\.[\w$]*)*)$/);
+    if(!m || m[1].length < 2) return null;
+    let p = m[1], start = pos - p.length;
+    let items = JS_SNIPPETS.filter(s => s[0].toLowerCase().startsWith(p.toLowerCase()));
+    if(!items.length && p.includes('.')){
+      p = p.slice(p.lastIndexOf('.') + 1);
+      start = pos - p.length;
+      items = p.length ? JS_SNIPPETS.filter(s => !s[0].includes('.') && s[0].toLowerCase().startsWith(p.toLowerCase())) : [];
+    }
+    return items.length ? { items: items.slice(0, 8).map(s => ({ label: s[0], text: s[1] })), start, end: pos, kind: 'js' } : null;
+  }
+  const lt = before.lastIndexOf('<');
+  if(lt === -1) return null;
+  const seg = before.slice(lt);
+  const tm = seg.match(/^<([a-zA-Z]*)$/);
+  if(tm){
+    if(!tm[1]) return null;
+    const p = tm[1].toLowerCase();
+    const items = [...new Set(HTML_TAGS.filter(t => t.startsWith(p)))].slice(0, 8)
+      .map(t => ({ label: t, text: VOID_ELEMENTS.has(t) ? t + '>|' : t + '>|</' + t + '>' }));
+    return items.length ? { items, start: lt + 1, end: pos, kind: 'tag' } : null;
+  }
+  const even = (c) => (seg.match(new RegExp(c, 'g')) || []).length % 2 === 0;
+  const am = seg.match(/^<([a-zA-Z][\w-]*)\s(?:[\s\S]*\s)?([a-zA-Z-]*)$/);
+  if(am && !seg.includes('>') && even('"') && even("'")){
+    const tag = am[1].toLowerCase(), p = am[2].toLowerCase();
+    const names = [...new Set([...(TAG_ATTRS[tag] || []), ...GLOBAL_ATTRS, ...EXTRA_ATTRS])].filter(n => n.startsWith(p)).slice(0, 8);
+    return names.length ? { items: names.map(n => ({ label: n, text: n + '="|"' })), start: pos - p.length, end: pos, kind: 'attr' } : null;
+  }
+  return null;
+}
+
+function showSuggest(items, start, end, caretPos, kind){
   suggestItems = items;
   suggestIndex = 0;
+  suggestKind = kind;
   suggestRange = { start, end };
-  tagSuggestEl.innerHTML = items.map((t, i) => '<div class="tagSuggestItem" data-i="' + i + '">' + t + '</div>').join('');
+  tagSuggestEl.innerHTML = items.map((t, i) => '<div class="tagSuggestItem" data-i="' + i + '">' + t.label + '</div>').join('');
   tagSuggestEl.style.display = 'block';
   renderSuggestActive();
   positionSuggestBox(caretPos);
@@ -354,23 +429,24 @@ function showSuggest(items, start, end, caretPos){
 function updateSuggestState(){
   const pos = codeEl.selectionStart;
   if(pos !== codeEl.selectionEnd){ hideSuggest(); return; }
-  const before = codeEl.value.slice(0, pos);
-  const m = before.match(/<([a-zA-Z]*)$/);
-  if(!m || m[1].length === 0){ hideSuggest(); return; }
-  const partial = m[1].toLowerCase();
-  const matches = [...new Set(HTML_TAGS.filter(t => t.startsWith(partial)))].slice(0, 8);
-  if(matches.length === 0){ hideSuggest(); return; }
-  showSuggest(matches, pos - m[1].length, pos, pos);
+  const res = getSuggestions(codeEl.value.slice(0, pos));
+  if(!res){ hideSuggest(); return; }
+  showSuggest(res.items, res.start, res.end, pos, res.kind);
 }
 
 function applySuggestion(index){
-  if(!suggestRange || !suggestItems[index]) return;
-  const tag = suggestItems[index];
+  const item = suggestItems[index];
+  if(!suggestRange || !item) return;
   const { start, end } = suggestRange;
+  const value = codeEl.value;
+  const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+  const indent = (value.slice(lineStart, start).match(/^[ \t]*/) || [''])[0];
+  const raw = item.text.replace(/\n/g, '\n' + indent);
+  const bar = raw.indexOf('|');
+  const text = raw.replace('|', '');
   codeEl.setSelectionRange(start, end);
-  const insertion = VOID_ELEMENTS.has(tag) ? tag + '>' : tag + '></' + tag + '>';
-  insertAtCursor(insertion);
-  codeEl.selectionStart = codeEl.selectionEnd = start + tag.length + 1;
+  insertAtCursor(text);
+  codeEl.selectionStart = codeEl.selectionEnd = start + (bar === -1 ? text.length : bar);
   hideSuggest();
 }
 
@@ -386,7 +462,7 @@ codeEl.addEventListener('keydown', (e) => {
   const key = e.key;
 
   if(suggestItems.length){
-    if(key === 'Tab' || key === 'Enter'){
+    if(key === 'Tab' || (key === 'Enter' && suggestKind === 'tag')){
       e.preventDefault();
       applySuggestion(suggestIndex);
       return;
@@ -457,8 +533,9 @@ codeEl.addEventListener('keydown', (e) => {
     const after = value[start];
     const opens = '{[('.includes(before);
     const closes = AUTOFILL_PAIRS[before] === after;
+    const between = before === '>' && value.slice(start, start + 2) === '</';
     e.preventDefault();
-    if(opens && closes){
+    if((opens && closes) || between){
       insertAtCursor('\n' + indent + '  ' + '\n' + indent);
       codeEl.selectionStart = codeEl.selectionEnd = start + ('\n' + indent + '  ').length;
     } else if(opens){
