@@ -1,0 +1,58 @@
+{
+  "name": "fadan-code",
+  "version": "1.0.0",
+  "description": "Fadan Code — A real-filesystem code editor by fadan3003",
+  "author": "fadan3003",
+  "homepage": "https://github.com/fadan3003/fadan-code",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:deb": "electron-builder --linux deb",
+    "build:appimage": "electron-builder --linux AppImage",
+    "build:all": "electron-builder --linux",
+    "build:win": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^28.1.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "dev.fadan.code",
+    "productName": "Fadan Code",
+    "copyright": "Copyright © 2026 fadan3003",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "build/icon.png"
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "target": [
+        { "target": "deb",      "arch": ["x64"] },
+        { "target": "AppImage", "arch": ["x64"] }
+      ],
+      "category": "Development",
+      "icon": "build/icon.png",
+      "maintainer": "fadan3003",
+      "description": "Fadan Code — Code editor with AI generation",
+      "executableArgs": ["--no-sandbox"],
+      "desktop": {
+        "Name": "Fadan Code",
+        "Terminal": "false",
+        "Type": "Application",
+        "Icon": "fadan-code",
+        "StartupWMClass": "fadan-code",
+        "Comment": "Fadan Code — Code editor with AI generation",
+        "Categories": "Development;",
+        "StartupNotify": "false"
+      }
+    },
+    "deb": {
+      "depends": ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libsecret-1-0"]
+    }
+  }
+}
